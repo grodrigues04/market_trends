@@ -1,0 +1,8 @@
+.env
+data/
+__pycache__/
+node_modules/
+.next/
+.vercel/
+# Copy of the deep-research skill of the Claude account (see README), not redistributed
+routine/skills/
