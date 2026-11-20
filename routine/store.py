@@ -74,7 +74,14 @@ def read_highlights(path: Path) -> tuple[dict | None, str | None]:
         highlights = json.loads(path.read_text(encoding="utf-8"))
     except json.JSONDecodeError as error:
         return None, f"output/highlights.json não é um JSON válido: {error}"
-    keys = [recommendation.get("key") for recommendation in highlights.get("recommendations", [])]
+    recommendations = highlights.get("recommendations") or []
+    # Accepts {"most_promising": {...}} too: the order of the brief is restored from the keys
+    if isinstance(recommendations, dict):
+        recommendations = [{"key": key, **recommendations[key]} for key in RECOMMENDATION_KEYS if key in recommendations]
+        highlights["recommendations"] = recommendations
+    if not all(isinstance(recommendation, dict) for recommendation in recommendations):
+        return highlights, "highlights.json: recommendations precisa ser uma lista de objetos"
+    keys = [recommendation.get("key") for recommendation in recommendations]
     if keys != RECOMMENDATION_KEYS:
         return highlights, f"highlights.json com recomendações inesperadas: {keys}"
     return highlights, None
