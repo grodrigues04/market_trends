@@ -11,6 +11,8 @@ STORE="/opt/store/bin/python /app/store.py"
 
 mkdir -p /data/state /data/logs /data/work
 chown node:node /data/work /data/logs
+# The log of the day is shared with run.sh, which runs as node
+touch "$LOG_FILE" && chown node:node "$LOG_FILE"
 
 log() {
   echo "[run_daily $(date '+%F %T')] $*" | tee -a "$LOG_FILE"
