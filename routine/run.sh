@@ -159,8 +159,17 @@ if [ "$(grep -l 'não foi concluído nesta edição' "$WORK_DIR"/output/parts/pa
   fail "nenhum país foi pesquisado. Veja data/logs/$RUN_DATE.log e data/work/$RUN_DATE/claude-*.jsonl."
 fi
 
+highlights_valid() {
+  jq -e -f /app/highlights-check.jq "$WORK_DIR/output/highlights.json" >/dev/null 2>&1
+}
+
 # 2. Conclusions: parts 7 to 11, highlights.json and DONE
 for attempt in 1 2; do
+  # DONE only counts with a highlights.json the blog and youtube_dark can read
+  if [ -e "$WORK_DIR/output/DONE" ] && ! highlights_valid; then
+    log "highlights.json has the wrong structure, the conclusions session runs again"
+    rm -f "$WORK_DIR/output/DONE"
+  fi
   [ -e "$WORK_DIR/output/DONE" ] && break
   if [ "$EDITION" = "B" ] || [ -e "$USAGE_LATCH" ]; then
     run_session conclusions /app/session-synthesis.md "" no
@@ -174,6 +183,10 @@ if [ -e "$USAGE_LATCH" ]; then
   log "Usage limit of edition A reached: $(cat "$USAGE_LATCH")"
   grep -q 'limite de uso' "$WORK_DIR/output/NOTICE" 2>/dev/null \
     || echo "A pesquisa parou de buscar novas fontes ao atingir 87% do limite de uso da sessão; o restante foi escrito com o que já tinha sido pesquisado." >> "$WORK_DIR/output/NOTICE"
+fi
+if [ -e "$WORK_DIR/output/DONE" ] && ! highlights_valid; then
+  rm -f "$WORK_DIR/output/DONE"
+  fail "output/highlights.json ficou com a estrutura errada depois de duas tentativas."
 fi
 [ -e "$WORK_DIR/output/DONE" ] || fail "o Claude terminou sem gerar output/DONE. Veja data/logs/$RUN_DATE.log e data/work/$RUN_DATE/claude-*.jsonl."
 log "Research finished"

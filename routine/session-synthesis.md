@@ -51,9 +51,14 @@ It feeds the blog home page and the YouTube Shorts routine, so it must mirror pa
   `most_promising`, `overlooked_micro_niches`, `growth_6_12_months`, `best_balance`,
   `faceless_content`, `saas_ai`, `adapt_to_brazil` (the 7 lists of part 11), each with 10 items.
 - `top_opportunities` is the Top 50 of part 8 (all 50 rows).
+- Use exactly these field names, in English, as in the example: no other keys, no other structure
+  (lists as text are not accepted). Each item of a list is an object, not a string.
+- Validate it with `jq -e -f /app/highlights-check.jq output/highlights.json`: it must print
+  `true`. If it prints `false`, fix the file and run it again. If `output/highlights.json` already
+  exists when you start (a resumed run), validate it the same way and rewrite it if it fails.
 
 ## Finishing
 
-When all 11 part files end with `<!-- PARTE COMPLETA -->` and `output/highlights.json` is valid
-(check it with `jq`), write the empty file `output/DONE`. Write it only then: the run is
+When all 11 part files end with `<!-- PARTE COMPLETA -->` and the validation above prints `true`,
+write the empty file `output/DONE`. Write it only then: the run is
 considered failed without it.
