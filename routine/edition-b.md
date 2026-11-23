@@ -21,7 +21,9 @@ exceeded:
   7 to 11 yourself, only from the six country parts and the notes in `research_notes/`.
   - Size: parts 7 to 11 together have at most **50,000 characters**: part 7 up to 7,000, part 8
     (the Top 50 table, with short cells) up to 14,000, part 9 up to 7,000, part 10 up to 7,000 and
-    part 11 (the 7 lists of 10 items, one short line each) up to 15,000. `highlights.json` does not
-    count, but keep its descriptions short.
-  - Check with `wc -m output/parts/part-07.md ... part-11.md` before writing `output/DONE`, and
-    cut any part above its limit.
+    part 11 (the 7 lists of 10 items, one short line each) up to 15,000.
+  - `output/highlights.json` has at most **50,000 characters**, on its own. Keep all its required
+    content (the 7 lists with 10 items each and the 50 rows of the Top 50), with short
+    descriptions.
+  - Check with `wc -m output/parts/part-07.md ... part-11.md output/highlights.json` before
+    writing `output/DONE`, and cut anything above its limit.
