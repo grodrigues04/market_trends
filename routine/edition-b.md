@@ -9,5 +9,13 @@ exceeded:
     and snippets before opening pages), and then 1 writer subagent that opens no pages. The
     remaining pages are a reserve, not a target.
   - No additional round of research: the 5 subagents are spent by then.
+  - Size of the country part: every `##` section has at most **3,000 characters**, except
+    "Tendências relevantes nos 25 nichos" and "Fontes e evidências", with at most **30,000
+    characters** each. Give these limits to the writer subagent in its brief. Keep all 25 niches,
+    with fewer and shorter rows each; in "Fontes e evidências", keep the notes on the quality of
+    the evidence and the most important sources, without repeating every link of the tables.
+  - The writer checks the size before finishing: find the line numbers of the `## ` headings with
+    Grep, then `head -n <last line> <file> | tail -n +<first line> | wc -m` for each section, and
+    cuts any section above its limit.
 - Conclusions session: no subagents, no WebSearch and no WebFetch (they are disabled). Write parts
   7 to 11 yourself, only from the six country parts and the notes in `research_notes/`.
