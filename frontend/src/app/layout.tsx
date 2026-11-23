@@ -10,7 +10,7 @@ const inter = Inter({ subsets: ["latin"], variable: "--font-inter" });
 
 export const metadata: Metadata = {
   title: { default: "Radar de Mercado", template: "%s · Radar de Mercado" },
-  description: "Tendências globais e oportunidades de negócio para o Brasil, pesquisadas todo dia às 5h.",
+  description: "Tendências globais e oportunidades de negócio para o Brasil: edições diárias de segunda a quarta e uma edição completa às quintas.",
 };
 
 export default function RootLayout({ children }: LayoutProps<"/">) {
@@ -20,8 +20,8 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
         <SiteHeader />
         <main className="mx-auto w-full max-w-6xl flex-1 px-4 pb-24 sm:px-6">{children}</main>
         <footer className="border-t border-rule py-8 text-center text-sm text-ink-soft">
-          Pesquisa gerada automaticamente todos os dias às 5h (horário de Brasília). Confira as fontes antes de
-          decidir.
+          Pesquisa gerada automaticamente: edições diárias de segunda a quarta (1h) e edição completa às quintas
+          (21h), horário de Brasília. Confira as fontes antes de decidir.
         </footer>
       </body>
     </html>

@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { Suspense } from "react";
 
+import { EditionBadge } from "@/components/edition-badge";
 import { formatMonth, formatShortDate } from "@/lib/format";
 import { listResearches, type ResearchStatus, type ResearchSummary } from "@/lib/research";
 
@@ -19,7 +20,8 @@ export default function HistoryPage() {
       <p className="text-sm font-semibold uppercase tracking-[0.2em] text-accent">Arquivo</p>
       <h1 className="mt-3 font-serif text-4xl font-semibold tracking-tight sm:text-5xl">Histórico de pesquisas</h1>
       <p className="mt-4 max-w-2xl text-lg text-ink-soft">
-        Todas as edições do radar, da mais recente para a mais antiga.
+        Todas as edições do radar, da mais recente para a mais antiga. A edição completa sai às quintas; as
+        diárias, de segunda a quarta.
       </p>
       <Suspense fallback={<HistorySkeleton />}>
         <HistoryList />
@@ -63,13 +65,17 @@ function HistoryEntry({ research }: { research: ResearchSummary }) {
   const [day, month] = formatShortDate(research.date).split(" de ");
   return (
     <li>
-      <Link href={`/pesquisa/${research.date}`} className="group flex gap-5 py-6 sm:gap-8">
+      <Link
+        href={`/pesquisa/${research.date}`}
+        className={`group flex gap-5 py-6 sm:gap-8 ${research.edition === "A" ? "-mx-4 rounded-xl bg-accent-soft px-4" : ""}`}
+      >
         <div className="w-14 shrink-0 text-center">
           <p className="font-serif text-3xl font-semibold leading-none text-accent">{day}</p>
           <p className="mt-1 text-xs uppercase tracking-wider text-ink-soft">{month}</p>
         </div>
         <div className="min-w-0 flex-1">
           <div className="flex flex-wrap items-center gap-2">
+            <EditionBadge edition={research.edition} />
             <span className={`rounded-full border px-2.5 py-0.5 text-xs font-medium ${status.className}`}>
               {status.label}
             </span>

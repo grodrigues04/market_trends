@@ -1,3 +1,4 @@
+import { EditionBadge } from "@/components/edition-badge";
 import { Markdown } from "@/components/markdown";
 import { formatLongDate, readingMinutes } from "@/lib/format";
 import type { Recommendation, Research, TopOpportunity } from "@/lib/research";
@@ -21,6 +22,7 @@ export function ResearchArticle({ research }: { research: Research }) {
     <article>
       <ResearchHero research={research} minutes={readingMinutes(fullText)} />
       {research.status !== "completed" && <StatusNotice research={research} />}
+      {research.notices && research.notices.length > 0 && <EditionNotices notices={research.notices} />}
       {research.recommendations.length > 0 && <Recommendations recommendations={research.recommendations} />}
       {research.top_opportunities.length > 0 && <TopOpportunities opportunities={research.top_opportunities} />}
       {research.parts.length > 0 && <FullReport research={research} />}
@@ -31,9 +33,12 @@ export function ResearchArticle({ research }: { research: Research }) {
 function ResearchHero({ research, minutes }: { research: Research; minutes: number }) {
   return (
     <header className="border-b border-rule py-12 sm:py-16">
-      <p className="text-sm font-semibold uppercase tracking-[0.2em] text-accent">
-        Edição de {formatLongDate(research.date)}
-      </p>
+      <div className="flex flex-wrap items-center gap-3">
+        <EditionBadge edition={research.edition} />
+        <p className="text-sm font-semibold uppercase tracking-[0.2em] text-accent">
+          Edição de {formatLongDate(research.date)}
+        </p>
+      </div>
       <h1 className="mt-4 max-w-4xl font-serif text-4xl leading-[1.1] font-semibold tracking-tight text-balance sm:text-6xl">
         {research.title}
       </h1>
@@ -58,6 +63,19 @@ function StatusNotice({ research }: { research: Research }) {
       : `Esta edição não terminou. ${research.error ?? ""}`;
   return (
     <p className="mt-8 rounded-xl border border-accent/40 bg-accent-soft px-5 py-4 text-sm leading-relaxed">{message}</p>
+  );
+}
+
+function EditionNotices({ notices }: { notices: string[] }) {
+  return (
+    <div className="mt-8 rounded-xl border border-rule bg-paper-raised px-5 py-4 text-sm leading-relaxed text-ink-soft">
+      <p className="font-semibold text-ink">Limites desta edição</p>
+      <ul className="mt-2 list-disc space-y-1 pl-5">
+        {notices.map((notice) => (
+          <li key={notice}>{notice}</li>
+        ))}
+      </ul>
+    </div>
   );
 }
 

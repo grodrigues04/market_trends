@@ -6,6 +6,9 @@ import { getDatabase } from "@/lib/database";
 
 export type ResearchStatus = "running" | "completed" | "failed";
 
+// A = complete edition (Thursday), B = daily edition with limits (Monday to Wednesday)
+export type ResearchEdition = "A" | "B";
+
 export type ResearchPart = {
   number: number;
   title: string;
@@ -43,18 +46,24 @@ export type TopOpportunity = {
 
 export type Research = {
   date: string;
+  edition?: ResearchEdition;
   status: ResearchStatus;
   title: string;
   summary: string;
   parts: ResearchPart[];
   recommendations: Recommendation[];
   top_opportunities: TopOpportunity[];
+  // What the limits of the edition cut (countries not researched, usage limit reached)
+  notices?: string[];
   started_at?: Date;
   finished_at?: Date;
   error?: string;
 };
 
-export type ResearchSummary = Pick<Research, "date" | "status" | "title" | "summary" | "started_at" | "finished_at"> & {
+export type ResearchSummary = Pick<
+  Research,
+  "date" | "edition" | "status" | "title" | "summary" | "started_at" | "finished_at"
+> & {
   part_count: number;
 };
 
@@ -67,10 +76,10 @@ async function researches() {
   return database.collection<Research>("researches");
 }
 
-export async function getLatestResearch(): Promise<Research | null> {
+export async function getLatestResearch(edition?: ResearchEdition): Promise<Research | null> {
   const collection = await researches();
   return collection.findOne(
-    { date: { $regex: REAL_DATE.source }, status: "completed" },
+    { date: { $regex: REAL_DATE.source }, status: "completed", ...(edition ? { edition } : {}) },
     { sort: { date: -1 }, projection: { _id: 0 } },
   );
 }
@@ -103,6 +112,7 @@ export async function listResearches(): Promise<ResearchSummary[]> {
         $project: {
           _id: 0,
           date: 1,
+          edition: 1,
           status: 1,
           title: 1,
           summary: 1,
