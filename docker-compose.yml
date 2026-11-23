@@ -1,8 +1,8 @@
 name: market-trends
 
 services:
-  # Runs the market research every day at 05:00 and saves it in MongoDB (read by the frontend and
-  # by youtube_dark). Claude runs as `node` with only its own token (see
+  # Runs the market research (edition B Mon-Wed 01:00, edition A Thu 21:00) and saves it in
+  # MongoDB (read by the frontend and by youtube_dark). Claude runs as `node` with only its own token (see
   # routine/run-as-claude-user.sh); MONGO_URI is visible only to the root processes.
   market-trends:
     build: ./routine
@@ -11,7 +11,7 @@ services:
     environment:
       CLAUDE_CODE_OAUTH_TOKEN: ${CLAUDE_CODE_OAUTH_TOKEN:-}
       CLAUDE_MODEL: ${CLAUDE_MODEL:-claude-opus-5-5}
-      CLAUDE_TIMEOUT: ${CLAUDE_TIMEOUT:-7h}
+      CLAUDE_TIMEOUT: ${CLAUDE_TIMEOUT:-3h}  # per session (one per country, one for the conclusions)
       MONGO_URI: ${MONGO_URI:?MONGO_URI is required}
       TZ: America/Sao_Paulo
     volumes:

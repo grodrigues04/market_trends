@@ -9,7 +9,7 @@ if [ "$(id -u)" = "0" ]; then
   mkdir -p "/data/work/$TEST_DATE" && chown node:node "/data/work/$TEST_DATE"
   setpriv --reuid=node --regid=node --init-groups env -i HOME=/home/node PATH="$PATH" \
     CLAUDE_CODE_OAUTH_TOKEN="${CLAUDE_CODE_OAUTH_TOKEN:-}" "$0" "$TEST_DATE" || exit 1
-  /opt/store/bin/python /app/store.py finish "$TEST_DATE" && echo "OK: $TEST_DATE saved in MongoDB"
+  /opt/store/bin/python /app/store.py finish "$TEST_DATE" B && echo "OK: $TEST_DATE saved in MongoDB"
   exit $?
 fi
 

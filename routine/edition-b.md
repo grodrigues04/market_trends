@@ -1,0 +1,13 @@
+Edition B (daily edition, Monday to Wednesday). Hard limits, enforced by the system and never
+exceeded:
+
+- Country sessions: at most **5 subagents** in the session, counting everyone (researchers and the
+  writer), and at most **110 pages** opened with WebFetch, counting the pages of every subagent and
+  your own. The 6th subagent and the 111th page are denied.
+  - Plan for it: 4 research subagents in parallel, each with a share of the 25 niches and an
+    explicit budget of at most 25 pages (tell each one its budget and to prefer search results
+    and snippets before opening pages), and then 1 writer subagent that opens no pages. The
+    remaining pages are a reserve, not a target.
+  - No additional round of research: the 5 subagents are spent by then.
+- Conclusions session: no subagents, no WebSearch and no WebFetch (they are disabled). Write parts
+  7 to 11 yourself, only from the six country parts and the notes in `research_notes/`.

@@ -1,10 +1,12 @@
 #!/usr/bin/env bash
-# One research per day: lock, mark as running in MongoDB, run Claude (as `node`), save the result.
+# One research: lock, mark as running in MongoDB, run Claude (as `node`), save the result.
+#   run_daily.sh <date> <A|B>   A = complete edition (Thursday), B = daily edition with limits
 # Root only (it holds MONGO_URI). MANUAL_RUN=1 runs again a day that already has a lock, reusing
 # the parts already finished in /data/work/<date>.
 set -uo pipefail
 
 RUN_DATE="${1:-$(date +%F)}"
+EDITION="${2:?usage: run_daily.sh <date> <A|B>}"
 LOCK_FILE="/data/state/$RUN_DATE.lock"
 LOG_FILE="/data/logs/$RUN_DATE.log"
 STORE="/opt/store/bin/python /app/store.py"
@@ -24,21 +26,21 @@ if [ -e "$LOCK_FILE" ] && [ "${MANUAL_RUN:-0}" != "1" ]; then
 fi
 date '+%F %T' > "$LOCK_FILE" || { echo "cannot create $LOCK_FILE"; exit 1; }
 
-log "Starting research of $RUN_DATE"
-$STORE start "$RUN_DATE" >> "$LOG_FILE" 2>&1 || log "WARNING: could not mark the research as running"
+log "Starting research of $RUN_DATE (edition $EDITION)"
+$STORE start "$RUN_DATE" "$EDITION" >> "$LOG_FILE" 2>&1 || log "WARNING: could not mark the research as running"
 
-/app/run.sh "$RUN_DATE"
+/app/run.sh "$RUN_DATE" "$EDITION"
 log "run.sh finished with exit code $?"
 
 # store.py decides between completed and failed from the files in /data/work/<date>/output.
 # Retries a few times: the research took hours, a network blip must not lose it.
 for attempt in 1 2 3 4 5; do
-  if $STORE finish "$RUN_DATE" >> "$LOG_FILE" 2>&1; then
+  if $STORE finish "$RUN_DATE" "$EDITION" >> "$LOG_FILE" 2>&1; then
     log "Result saved in MongoDB"
     exit 0
   fi
   log "Saving the result failed (attempt $attempt), retrying in 60s"
   sleep 60
 done
-log "ERROR: the result of $RUN_DATE was not saved. Run: docker exec market-trends /opt/store/bin/python /app/store.py finish $RUN_DATE"
+log "ERROR: the result of $RUN_DATE was not saved. Run: docker exec market-trends /opt/store/bin/python /app/store.py finish $RUN_DATE $EDITION"
 exit 1
