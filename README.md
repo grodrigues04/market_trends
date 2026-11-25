@@ -36,7 +36,9 @@ MongoDB Atlas  market_trends.researches ──▶ frontend (Vercel): edição ma
   `edition-b.md`) e `routine/prompt.md` (o briefing da pesquisa, igual ao pedido original). O
   Claude coordena a skill `deep-research`, pesquisa em inglês (e nos idiomas locais) e escreve
   em pt-BR. Uma sessão que termina sem a sua parte roda mais uma vez; partes prontas nunca são
-  refeitas.
+  refeitas. A sessão das conclusões não consegue terminar enquanto o `highlights.json` estiver
+  fora da estrutura que o blog e o youtube_dark leem (`highlights-hook.sh`, um hook `Stop`); se
+  mesmo assim ele ficar errado, é guardado como `highlights.invalid.json` e a sessão roda de novo.
 - `store.py` grava um documento por data em `market_trends.researches`: `date`, `edition`,
   `status`, `title`, `summary`, `parts[]`, `recommendations[]` (Parte 11), `top_opportunities[]`
   (Parte 8), `notices[]` (o que os limites cortaram, mostrado no blog), `started_at`,

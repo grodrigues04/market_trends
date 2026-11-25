@@ -6,7 +6,8 @@
 #      searches, pages or subagents; the countries not started yet are skipped and the
 #      conclusions are written from the countries that are ready.
 #   B (daily): per country, at most 5 subagents and 110 pages; the conclusions open no pages.
-# A session that ends without its part runs once more; finished parts are never redone.
+# A session that ends without its part runs once more; finished parts are never redone. The
+# conclusions session cannot finish with an invalid highlights.json (highlights-hook.sh).
 set -uo pipefail
 
 # Never run Claude as root: see run-as-claude-user.sh
@@ -98,6 +99,12 @@ run_session() {
   else
     echo '{}' > "$settings"
   fi
+  if [ "$label" = "conclusions" ]; then
+    # Claude cannot finish while highlights.json has the wrong structure
+    jq --arg command "/app/highlights-hook.sh $WORK_DIR $LIMITS_DIR/highlights-blocks" \
+      '.hooks.Stop = [{hooks: [{type: "command", command: $command}]}]' "$settings" > "$settings.tmp" \
+      && mv "$settings.tmp" "$settings"
+  fi
 
   log "Claude $label (edition $EDITION, model $CLAUDE_MODEL, timeout $CLAUDE_TIMEOUT)"
   {
@@ -169,6 +176,8 @@ for attempt in 1 2; do
   if [ -e "$WORK_DIR/output/DONE" ] && ! highlights_valid; then
     log "highlights.json has the wrong structure, the conclusions session runs again"
     rm -f "$WORK_DIR/output/DONE"
+    # Set aside, so the next session writes it again (session-synthesis.md explains the file)
+    mv "$WORK_DIR/output/highlights.json" "$WORK_DIR/output/highlights.invalid.json"
   fi
   [ -e "$WORK_DIR/output/DONE" ] && break
   if [ "$EDITION" = "B" ] || [ -e "$USAGE_LATCH" ]; then

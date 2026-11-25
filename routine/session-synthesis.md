@@ -56,6 +56,11 @@ It feeds the blog home page and the YouTube Shorts routine, so it must mirror pa
 - Validate it with `jq -e -f /app/highlights-check.jq output/highlights.json`: it must print
   `true`. If it prints `false`, fix the file and run it again. If `output/highlights.json` already
   exists when you start (a resumed run), validate it the same way and rewrite it if it fails.
+- If `output/highlights.invalid.json` exists, a previous session wrote `highlights.json` with the
+  wrong structure and it was rejected: write a new `output/highlights.json` in the structure above
+  (you may reuse its content), validate it, and only then write `output/DONE`.
+- You cannot finish while `output/highlights.json` fails the validation: a check runs when you
+  stop and sends you back to fix it.
 
 ## Finishing
 
