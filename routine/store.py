@@ -1,12 +1,12 @@
 """Saves the daily research in MongoDB. Runs as root only: Claude never sees MONGO_URI.
 
 Usage:
-    store.py start <date> <A|B>    marks the research of <date> as running
-    store.py finish <date> <A|B>   reads /data/work/<date>/output and saves it as completed or failed
+    store.py start <date>    marks the research of <date> as running
+    store.py finish <date>   reads /data/work/<date>/output and saves it as completed or failed
 
 Document of the `researches` collection (one per date, read by the frontend and by youtube_dark):
-    date, edition (A = complete, Thursday | B = daily, with limits), status (running | completed |
-    failed), started_at, finished_at, title, summary, parts [{number, title, slug, markdown}],
+    date, edition (always B now; A was the complete Thursday edition, kept in the old documents),
+    status (running | completed | failed), started_at, finished_at, title, summary, parts [{number, title, slug, markdown}],
     recommendations, top_opportunities, notices (what the limits cut, shown in the blog), error
 """
 
@@ -24,6 +24,8 @@ WORK_ROOT = Path(os.environ.get("WORK_ROOT", "/data/work"))
 DATABASE_NAME = os.environ.get("MONGO_DATABASE", "market_trends")
 COLLECTION_NAME = "researches"
 PART_COUNT = 11
+# The only edition now (the documents of the old complete edition keep "A")
+EDITION = "B"
 PART_COMPLETE_MARKER = "<!-- PARTE COMPLETA -->"
 RECOMMENDATION_KEYS = [
     "most_promising",
@@ -88,17 +90,17 @@ def read_highlights(path: Path) -> tuple[dict | None, str | None]:
     return highlights, None
 
 
-def start(run_date: str, edition: str) -> None:
+def start(run_date: str) -> None:
     now = datetime.now(timezone.utc)
     get_collection().update_one(
         {"date": run_date},
         {
-            "$set": {"status": "running", "edition": edition, "started_at": now, "updated_at": now},
+            "$set": {"status": "running", "edition": EDITION, "started_at": now, "updated_at": now},
             "$unset": {"error": "", "finished_at": ""},
         },
         upsert=True,
     )
-    print(f"{run_date}: running (edition {edition})")
+    print(f"{run_date}: running")
 
 
 def read_notices(path: Path) -> list[str]:
@@ -108,7 +110,7 @@ def read_notices(path: Path) -> list[str]:
     return list(dict.fromkeys(lines))  # a resumed run may write the same notice again
 
 
-def finish(run_date: str, edition: str) -> None:
+def finish(run_date: str) -> None:
     output_dir = WORK_ROOT / run_date / "output"
     parts = []
     for number in range(1, PART_COUNT + 1):
@@ -132,7 +134,7 @@ def finish(run_date: str, edition: str) -> None:
     now = datetime.now(timezone.utc)
     document = {
         "status": "failed" if errors else "completed",
-        "edition": edition,
+        "edition": EDITION,
         "notices": read_notices(output_dir / "NOTICE"),
         "finished_at": now,
         "updated_at": now,
@@ -152,10 +154,10 @@ def finish(run_date: str, edition: str) -> None:
 
 
 def main() -> None:
-    if len(sys.argv) != 4 or sys.argv[1] not in ("start", "finish") or sys.argv[3] not in ("A", "B"):
+    if len(sys.argv) != 3 or sys.argv[1] not in ("start", "finish"):
         sys.exit(__doc__)
-    command, run_date, edition = sys.argv[1:]
-    start(run_date, edition) if command == "start" else finish(run_date, edition)
+    command, run_date = sys.argv[1:]
+    start(run_date) if command == "start" else finish(run_date)
 
 
 if __name__ == "__main__":

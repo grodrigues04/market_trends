@@ -20,8 +20,8 @@ export default function HistoryPage() {
       <p className="text-sm font-semibold uppercase tracking-[0.2em] text-accent">Arquivo</p>
       <h1 className="mt-3 font-serif text-4xl font-semibold tracking-tight sm:text-5xl">Histórico de pesquisas</h1>
       <p className="mt-4 max-w-2xl text-lg text-ink-soft">
-        Todas as edições do radar, da mais recente para a mais antiga. A edição completa sai às quintas; as
-        diárias, de segunda a quarta.
+        Todas as edições do radar, da mais recente para a mais antiga. As edições saem de segunda a quarta; as
+        completas, destacadas, são de quando ainda havia a edição de quinta.
       </p>
       <Suspense fallback={<HistorySkeleton />}>
         <HistoryList />
