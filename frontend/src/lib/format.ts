@@ -26,8 +26,3 @@ export function formatMonth(date: string): string {
 export function formatShortDate(date: string): string {
   return SHORT_DATE.format(fromIsoDate(date)).replace(".", "");
 }
-
-export function readingMinutes(markdown: string): number {
-  const words = markdown.split(/\s+/).filter(Boolean).length;
-  return Math.max(1, Math.round(words / 230));
-}

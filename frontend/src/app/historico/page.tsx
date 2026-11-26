@@ -79,12 +79,11 @@ function HistoryEntry({ research }: { research: ResearchSummary }) {
             <span className={`rounded-full border px-2.5 py-0.5 text-xs font-medium ${status.className}`}>
               {status.label}
             </span>
-            {research.part_count > 0 && <span className="text-xs text-ink-soft">{research.part_count} partes</span>}
+            {research.country_count > 0 && <span className="text-xs text-ink-soft">{research.country_count} países</span>}
           </div>
           <h3 className="mt-2 font-serif text-xl font-semibold leading-snug group-hover:text-accent sm:text-2xl">
             {research.title || `Pesquisa de ${research.date}`}
           </h3>
-          {research.summary && <p className="mt-2 line-clamp-2 text-ink-soft">{research.summary}</p>}
         </div>
       </Link>
     </li>
