@@ -3,8 +3,9 @@
 # country, output/countries/country-NN.json), then one for the conclusions (output/highlights.json
 # and DONE). store.py (root) saves the result afterwards. The limits (edition-b.md) are enforced by
 # limit-hook.sh and here:
-#   - per country, at most 2 subagents and 40 pages, and no new search, page or subagent once the
-#     5-hour usage window reaches the share of the country (country N: N x 9%);
+#   - per country, at most 5 subagents, 50 searches and 50 pages (each subagent at most 10 searches
+#     and 10 pages), and no new search, page or subagent once the 5-hour usage window reaches the
+#     share of the country (country N: N x 9%);
 #   - the research stops at 65% of the 5-hour window: no new search, page or subagent, and the
 #     countries not started yet are skipped. The rest of the window is for writing the tables with
 #     what was researched and for the conclusions (which open no pages). A country session still
@@ -30,8 +31,11 @@ STOPPED_FILE="$LIMITS_DIR/research-stopped"
 RESEARCH_MAX_UTILIZATION=0.65
 COUNTRY_UTILIZATION=0.09
 COUNTRY_SESSION_MAX_UTILIZATION=0.75
-MAX_PAGES_PER_COUNTRY=40
-MAX_SUBAGENTS_PER_COUNTRY=2
+MAX_SUBAGENTS_PER_COUNTRY=5
+MAX_SEARCHES_PER_COUNTRY=50
+MAX_PAGES_PER_COUNTRY=50
+MAX_SEARCHES_PER_SUBAGENT=10
+MAX_PAGES_PER_SUBAGENT=10
 BASE_TOOLS=("Skill" "TodoWrite" "Read" "Write" "Edit" "Glob" "Grep" "Bash(mkdir:*)" "Bash(ls:*)"
             "Bash(wc:*)" "Bash(jq:*)" "Bash(tail:*)" "Bash(head:*)")
 WEB_TOOLS=("Agent" "Task" "WebSearch" "WebFetch")
@@ -204,7 +208,7 @@ for country in "${COUNTRIES[@]}"; do
     # The counters stay in limits/ across retries: a second attempt never gets a new budget
     budget=$(awk -v number="$number" -v share="$COUNTRY_UTILIZATION" -v max="$RESEARCH_MAX_UTILIZATION" \
       'BEGIN { budget = number * share; printf "%.2f", (budget < max ? budget : max) }')
-    hook="/app/limit-hook.sh budget $LIMITS_DIR/country-$number $MAX_PAGES_PER_COUNTRY $MAX_SUBAGENTS_PER_COUNTRY STREAM_FILE $budget"
+    hook="/app/limit-hook.sh budget $LIMITS_DIR/country-$number STREAM_FILE $budget $MAX_SUBAGENTS_PER_COUNTRY $MAX_SEARCHES_PER_COUNTRY $MAX_PAGES_PER_COUNTRY $MAX_SEARCHES_PER_SUBAGENT $MAX_PAGES_PER_SUBAGENT"
     stop_hook="/app/json-check-hook.sh $file /app/country-check.jq $LIMITS_DIR/country-$number-check-blocks"
     run_session "country-$number" /app/session-country.md "$hook" yes "$stop_hook" "$COUNTRY_SESSION_MAX_UTILIZATION" \
       -e "s/{{PART2}}/$(printf '%02d' "$number")/g" \
@@ -218,7 +222,11 @@ for country in "${COUNTRIES[@]}"; do
       write_skipped_country "$number" "$heading" "não foi concluído nesta edição por uma falha na pesquisa."
     fi
   fi
-  log "Country $number used $(cat "$LIMITS_DIR/country-$number/pages" 2>/dev/null || echo 0) pages and $(cat "$LIMITS_DIR/country-$number/subagents" 2>/dev/null || echo 0) subagents"
+  used=()
+  for counter in subagents searches pages; do
+    used+=("$(cat "$LIMITS_DIR/country-$number/$counter" 2>/dev/null || echo 0) $counter")
+  done
+  log "Country $number used ${used[0]}, ${used[1]} and ${used[2]}"
 done
 
 researched=0

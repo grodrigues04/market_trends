@@ -11,7 +11,7 @@ o MongoDB guarda apenas as tabelas (as edições antigas mantêm o texto delas, 
 | Uso da janela de 5h | A pesquisa **para em 65%**: nenhuma busca, página ou subagente novo, e os países que faltam ficam de fora. O restante da janela é só para escrever as tabelas com o que foi pesquisado e para as conclusões, que são salvas e publicadas normalmente. |
 | Orçamento por país | O país N para de buscar quando a janela chega em N × 9% (EUA 9%, China 18%, ... Canadá 54%) e escreve as tabelas com o que tem. |
 | Sessão de país | Uma sessão de país que ainda está rodando em **75%** é morta, para sobrar janela para as conclusões. |
-| Por país | No máximo **2 subagentes** de pesquisa e **40 páginas** abertas; a própria sessão escreve as tabelas. As conclusões não abrem páginas. |
+| Por país | No máximo **5 subagentes** de pesquisa, **50 buscas** e **50 páginas** abertas; cada subagente faz no máximo **10 buscas e 10 páginas**. A própria sessão escreve as tabelas, sem buscar. As conclusões não buscam nem abrem páginas. |
 
 A edição A (completa, de quinta à noite) foi desligada porque passava do limite de uso; as edições
 A antigas continuam no histórico.
@@ -58,9 +58,11 @@ Os limites não dependem do Claude contar certo: `routine/limit-hook.sh` é um h
 do Claude Code, chamado antes de cada ferramenta, inclusive nos subagentes. Uma chamada negada
 não roda, e o Claude recebe o motivo (`LIMIT REACHED`) para fechar a parte com o que tem.
 
-- **Páginas e subagentes**: conta as chamadas de `WebFetch` e `Agent` da sessão do país em
-  `data/work/<data>/limits/country-N/` e nega a 41ª página e o 3º subagente. Os contadores
-  continuam numa segunda tentativa, que nunca ganha um limite novo. A sessão das conclusões roda
+- **Buscas, páginas e subagentes**: conta as chamadas de `WebSearch`, `WebFetch` e `Agent` da
+  sessão do país em `data/work/<data>/limits/country-N/` e nega o 6º subagente, a 51ª busca ou
+  página do país e a 11ª busca ou página de um subagente (o Claude Code manda o `agent_id` no hook
+  quando a chamada vem de um subagente; a contagem de cada um fica em `subagents.d/`). Os
+  contadores continuam numa segunda tentativa, que nunca ganha um limite novo. A sessão das conclusões roda
   sem `WebFetch`, `WebSearch` e `Agent`.
 - **Orçamento de uso por país**: lê o uso da janela de 5h que o Claude Code grava no stream
   (`rate_limit_event`, a cada 1% da janela, contando os subagentes). Quando chega no orçamento do
