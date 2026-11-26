@@ -7,7 +7,8 @@
 #   limit-hook.sh budget <counter_dir> <max_pages> <max_subagents> <stream_file> <max_utilization>
 #       One country per session: at most <max_pages> WebFetch calls and <max_subagents> Agent
 #       calls, counted in <counter_dir> (kept across retries), and no WebSearch, WebFetch or Agent
-#       once the 5-hour usage window reaches <max_utilization> (read from <stream_file>).
+#       once the 5-hour usage window reaches <max_utilization> (read from <stream_file>): the
+#       share of the country, never above the 65% where the whole research stops.
 set -uo pipefail
 
 input=$(cat)
@@ -26,9 +27,9 @@ max_utilization="$6"
 
 case "$tool" in
   WebFetch) counter=pages; max="$3"
-    message="LIMIT REACHED: this country already opened its $3 pages, the hard limit of this edition. Do not call WebFetch again. Finish with the notes you already have: save them and return (or write the part)." ;;
+    message="LIMIT REACHED: this country already opened its $3 pages, the hard limit of this edition. Do not call WebFetch again. Finish with the notes you already have: save them and return (or write the JSON of the country)." ;;
   Agent|Task) counter=subagents; max="$4"
-    message="LIMIT REACHED: this country already used its $4 subagents, the hard limit of this edition. Do not call Agent again. Write the part yourself from research_notes/." ;;
+    message="LIMIT REACHED: this country already used its $4 subagents, the hard limit of this edition. Do not call Agent again. Write the JSON of the country yourself from research_notes/." ;;
   WebSearch) counter="" ;;
   *) exit 0 ;;
 esac
@@ -37,7 +38,7 @@ esac
 utilization=$(tail -c 5000000 "$stream_file" 2>/dev/null | grep '"rate_limit_event"' | tail -n 1 \
   | jq -r '.rate_limit_info.unifiedWindows.five_hour.utilization // 0' 2>/dev/null)
 if awk -v used="${utilization:-0}" -v max="$max_utilization" 'BEGIN { exit !(used >= max) }'; then
-  deny "LIMIT REACHED: this country used its share of the usage budget (the 5-hour window is at ${utilization}, the limit for this country is ${max_utilization}). No new searches, pages or subagents. Finish only what is in progress with what you already have: save your notes and return, or write the part from research_notes/."
+  deny "LIMIT REACHED: the research of this country is over (the 5-hour usage window is at ${utilization}, the limit for this country is ${max_utilization}). No new searches, pages or subagents. Finish only what is in progress with what you already have: save your notes and return, or write the JSON of the country from research_notes/."
 fi
 
 [ -n "$counter" ] || exit 0

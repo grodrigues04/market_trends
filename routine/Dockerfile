@@ -20,9 +20,9 @@ RUN python3 -m venv /opt/store \
 RUN mkdir -p /home/node/.claude/skills && chown -R node:node /home/node/.claude
 
 COPY --chmod=755 scheduler.sh run_daily.sh run.sh run-as-claude-user.sh limit-hook.sh \
-     highlights-hook.sh smoke-test.sh /app/
+     json-check-hook.sh smoke-test.sh /app/
 COPY --chmod=644 store.py prompt.md instructions.md session-country.md session-synthesis.md \
-     edition-b.md highlights-check.jq /app/
+     edition-b.md country-check.jq highlights-check.jq /app/
 
 # Starts as root on purpose: see run-as-claude-user.sh
 WORKDIR /data

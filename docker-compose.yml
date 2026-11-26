@@ -1,7 +1,7 @@
 name: market-trends
 
 services:
-  # Runs the market research (Mon-Wed 01:00, up to 70% of the 5-hour usage window) and saves it in
+  # Runs the market research (Mon-Wed 01:00, research stops at 65% of the 5-hour usage window) and saves it in
   # MongoDB (read by the frontend and by youtube_dark). Claude runs as `node` with only its own token (see
   # routine/run-as-claude-user.sh); MONGO_URI is visible only to the root processes.
   market-trends:

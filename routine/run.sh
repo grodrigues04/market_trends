@@ -1,14 +1,16 @@
 #!/usr/bin/env bash
-# Runs the research as `node`, in separate Claude sessions: one per country (parts 1 to 6), then
-# one for the conclusions (parts 7 to 11, highlights.json and DONE). store.py (root) saves the
-# result afterwards. The limits (edition-b.md) are enforced by limit-hook.sh:
+# Runs the research as `node`, in separate Claude sessions: one per country (the tables of the
+# country, output/countries/country-NN.json), then one for the conclusions (output/highlights.json
+# and DONE). store.py (root) saves the result afterwards. The limits (edition-b.md) are enforced by
+# limit-hook.sh and here:
 #   - per country, at most 2 subagents and 40 pages, and no new search, page or subagent once the
-#     5-hour usage window reaches the budget of the country (country N: N x 9%);
-#   - the conclusions open no pages;
-#   - the whole research never goes past 70% of the 5-hour window: at 70% the running session is
-#     killed and the research is cancelled (watch_usage).
-# A session that ends without its part runs once more; finished parts are never redone. The
-# conclusions session cannot finish with an invalid highlights.json (highlights-hook.sh).
+#     5-hour usage window reaches the share of the country (country N: N x 9%);
+#   - the research stops at 65% of the 5-hour window: no new search, page or subagent, and the
+#     countries not started yet are skipped. The rest of the window is for writing the tables with
+#     what was researched and for the conclusions (which open no pages). A country session still
+#     going at 75% is stopped, so the conclusions always have room (watch_usage).
+# A session that ends without its file runs once more while the research has not stopped; finished
+# files are never redone. A session cannot finish with an invalid JSON file (json-check-hook.sh).
 set -uo pipefail
 
 # Never run Claude as root: see run-as-claude-user.sh
@@ -21,19 +23,22 @@ CLAUDE_TIMEOUT="${CLAUDE_TIMEOUT:-3h}"
 CLAUDE_MAX_TURNS="${CLAUDE_MAX_TURNS:-300}"
 CLAUDE_MODEL="${CLAUDE_MODEL:-claude-opus-5-5}"
 LIMITS_DIR="$WORK_DIR/limits"
-CANCEL_FILE="$LIMITS_DIR/usage-cancelled"
-# Share of the 5-hour window: the research is cancelled at MAX_UTILIZATION, and country N stops
-# searching at N x COUNTRY_UTILIZATION, leaving room to write the parts and the conclusions
-MAX_UTILIZATION=0.70
+STOPPED_FILE="$LIMITS_DIR/research-stopped"
+# Share of the 5-hour window: the research stops at RESEARCH_MAX_UTILIZATION, country N stops
+# searching at N x COUNTRY_UTILIZATION, and a country session is killed at
+# COUNTRY_SESSION_MAX_UTILIZATION, leaving the rest of the window for the conclusions
+RESEARCH_MAX_UTILIZATION=0.65
 COUNTRY_UTILIZATION=0.09
+COUNTRY_SESSION_MAX_UTILIZATION=0.75
 MAX_PAGES_PER_COUNTRY=40
 MAX_SUBAGENTS_PER_COUNTRY=2
-PART_COMPLETE_MARKER="<!-- PARTE COMPLETA -->"
 BASE_TOOLS=("Skill" "TodoWrite" "Read" "Write" "Edit" "Glob" "Grep" "Bash(mkdir:*)" "Bash(ls:*)"
             "Bash(wc:*)" "Bash(jq:*)" "Bash(tail:*)" "Bash(head:*)")
 WEB_TOOLS=("Agent" "Task" "WebSearch" "WebFetch")
+# The stream of the last session of this run, where the usage of the window is read between sessions
+LAST_STREAM=""
 
-# part | heading in the report | name for the research | notes folder
+# number | name in the blog | name for the research | notes folder
 COUNTRIES=(
   "1|Estados Unidos|the United States|united-states"
   "2|China|China|china"
@@ -54,20 +59,21 @@ fail() {
   exit 1
 }
 
-part_file() {
-  printf '%s/output/parts/part-%02d.md' "$WORK_DIR" "$1"
+country_file() {
+  printf '%s/output/countries/country-%02d.json' "$WORK_DIR" "$1"
 }
 
-part_complete() {
-  [ -f "$1" ] && awk 'NF { last = $0 } END { exit !(last ~ /^<!-- PARTE COMPLETA -->[[:space:]]*$/) }' "$1"
+country_complete() {
+  jq -e -f /app/country-check.jq "$1" >/dev/null 2>&1
 }
 
 # Written by run.sh, not by Claude: a country that was not researched in this edition
-write_skipped_part() {
+write_skipped_country() {
   local number="$1" heading="$2" reason="$3"
-  printf '# Parte %s — %s\n\n> %s\n\n%s\n' "$number" "$heading" "$reason" "$PART_COMPLETE_MARKER" > "$(part_file "$number")"
-  echo "Parte $number ($heading): $reason" >> "$WORK_DIR/output/NOTICE"
-  log "Part $number skipped: $reason"
+  jq -n --arg country "$heading" --arg skipped "$reason" '{country: $country, skipped: $skipped}' \
+    > "$(country_file "$number")"
+  echo "$heading $reason" >> "$WORK_DIR/output/NOTICE"
+  log "Country $number skipped: $reason"
 }
 
 # The usage of the 5-hour window (0 to 1), from the last rate_limit_event Claude Code wrote to a
@@ -81,13 +87,16 @@ at_least() {
   awk -v used="${1:-0}" -v max="$2" 'BEGIN { exit !(used >= max) }'
 }
 
-# Kills the session <pid> when the window reaches MAX_UTILIZATION (the research is cancelled)
+percent() {
+  awk -v share="$1" 'BEGIN { print share * 100 }'
+}
+
+# Kills the session <pid> when the window reaches <max> (a country session that keeps writing)
 watch_usage() {
-  local pid="$1" stream="$2" used
+  local pid="$1" stream="$2" max="$3" used
   while kill -0 "$pid" 2>/dev/null; do
     used=$(utilization "$stream")
-    if at_least "$used" "$MAX_UTILIZATION"; then
-      echo "$(date '+%F %T') five_hour utilization $used" > "$CANCEL_FILE"
+    if at_least "$used" "$max"; then
       log "The 5-hour window reached $used, killing the session"
       kill -TERM "$pid" 2>/dev/null
       return
@@ -96,19 +105,30 @@ watch_usage() {
   done
 }
 
-cancel_if_over() {
-  [ -e "$CANCEL_FILE" ] || return 0
-  fail "pesquisa cancelada: chegou a $(awk '{print $NF * 100}' "$CANCEL_FILE")% da janela de 5 horas de uso (o máximo é $(awk -v max="$MAX_UTILIZATION" 'BEGIN {print max * 100}')%)."
+# research_stopped <when>: marks the research as stopped once the window reaches
+# RESEARCH_MAX_UTILIZATION. Returns 0 when it is stopped.
+research_stopped() {
+  local when="$1" used
+  [ -e "$STOPPED_FILE" ] && return 0
+  [ -n "$LAST_STREAM" ] || return 1
+  used=$(utilization "$LAST_STREAM")
+  at_least "$used" "$RESEARCH_MAX_UTILIZATION" || return 1
+  echo "$(date '+%F %T') five_hour utilization $used" > "$STOPPED_FILE"
+  echo "A pesquisa parou $when, ao chegar em $(percent "$RESEARCH_MAX_UTILIZATION")% da janela de 5 horas de uso; o restante ficou para as tabelas e as conclusões." >> "$WORK_DIR/output/NOTICE"
+  log "The research stopped: the 5-hour window is at $used"
+  return 0
 }
 
-# run_session <label> <session prompt file> <hook command or ""> <web tools: yes|no> [sed args]
+# run_session <label> <session prompt file> <PreToolUse hook or ""> <web tools: yes|no>
+#             <Stop hook or ""> <utilization that kills the session, or ""> [sed args]
 run_session() {
-  local label="$1" session_file="$2" hook="$3" web="$4"
-  shift 4
+  local label="$1" session_file="$2" hook="$3" web="$4" stop_hook="$5" max_utilization="$6"
+  shift 6
   local stream="$WORK_DIR/claude-$label-$(date +%H%M%S).jsonl"
   local settings="$LIMITS_DIR/settings-$label.json"
   local tools=("${BASE_TOOLS[@]}")
   local disallowed=()
+  LAST_STREAM="$stream"
   if [ "$web" = "yes" ]; then
     tools+=("${WEB_TOOLS[@]}")
   else
@@ -122,9 +142,9 @@ run_session() {
   else
     echo '{}' > "$settings"
   fi
-  if [ "$label" = "conclusions" ]; then
-    # Claude cannot finish while highlights.json has the wrong structure
-    jq --arg command "/app/highlights-hook.sh $WORK_DIR $LIMITS_DIR/highlights-blocks" \
+  if [ -n "$stop_hook" ]; then
+    # Claude cannot finish while the JSON file of the session has the wrong structure
+    jq --arg command "$stop_hook" \
       '.hooks.Stop = [{hooks: [{type: "command", command: $command}]}]' "$settings" > "$settings.tmp" \
       && mv "$settings.tmp" "$settings"
   fi
@@ -134,7 +154,8 @@ run_session() {
     printf 'RUN DATE: %s. Use this date as "today" everywhere.\n\n' "$RUN_DATE"
     cat /app/instructions.md
     printf '\n\n---\n\nTHIS SESSION\n\n'
-    sed "$@" "$session_file"
+    # Without sed args (the conclusions), sed would read the file name as its script
+    if [ $# -gt 0 ]; then sed "$@" "$session_file"; else cat "$session_file"; fi
     printf '\n\n---\n\nLIMITS OF THIS EDITION\n\n'
     cat /app/edition-b.md
     printf '\n\n---\n\nRESEARCH BRIEF\n\n'
@@ -151,51 +172,66 @@ run_session() {
         "${disallowed[@]}" \
         < "$prompt" >> "$stream" 2>> "$LOG_FILE" &
   local pid=$!
-  watch_usage "$pid" "$stream" &
-  local watcher=$!
+  local watcher=""
+  if [ -n "$max_utilization" ]; then
+    watch_usage "$pid" "$stream" "$max_utilization" &
+    watcher=$!
+  fi
   wait "$pid"
   local code=$?
-  kill "$watcher" 2>/dev/null
-  wait "$watcher" 2>/dev/null
+  if [ -n "$watcher" ]; then
+    kill "$watcher" 2>/dev/null
+    wait "$watcher" 2>/dev/null
+  fi
   log "Claude $label finished with exit code $code (5-hour window at $(utilization "$stream"))"
-  cancel_if_over
 }
 
 [ -n "${CLAUDE_CODE_OAUTH_TOKEN:-}" ] || fail "CLAUDE_CODE_OAUTH_TOKEN não está definido no .env."
 [ -s "$HOME/.claude/skills/deep-research/SKILL.md" ] || log "WARNING: deep-research skill not found in ~/.claude/skills"
-mkdir -p "$WORK_DIR/output/parts" "$LIMITS_DIR" || fail "não foi possível criar $WORK_DIR."
-# A manual run (MANUAL_RUN=1) of a cancelled day starts again, with the same budgets
-rm -f "$WORK_DIR/output/FAILED" "$CANCEL_FILE"
+mkdir -p "$WORK_DIR/output/countries" "$LIMITS_DIR" || fail "não foi possível criar $WORK_DIR."
+# A manual run (MANUAL_RUN=1) of a failed day starts again, with the same page and subagent budgets
+rm -f "$WORK_DIR/output/FAILED" "$STOPPED_FILE"
 cd "$WORK_DIR" || fail "não foi possível entrar em $WORK_DIR."
 
 # 1. One session per country
 for country in "${COUNTRIES[@]}"; do
   IFS='|' read -r number heading name slug <<<"$country"
-  file=$(part_file "$number")
+  file=$(country_file "$number")
   for attempt in 1 2; do
-    part_complete "$file" && break
+    country_complete "$file" && break
+    # Past the limit nothing is researched anymore: the rest of the window is for the conclusions
+    research_stopped "antes de $heading" && break
     # The counters stay in limits/ across retries: a second attempt never gets a new budget
-    budget=$(awk -v number="$number" -v share="$COUNTRY_UTILIZATION" 'BEGIN { printf "%.2f", number * share }')
+    budget=$(awk -v number="$number" -v share="$COUNTRY_UTILIZATION" -v max="$RESEARCH_MAX_UTILIZATION" \
+      'BEGIN { budget = number * share; printf "%.2f", (budget < max ? budget : max) }')
     hook="/app/limit-hook.sh budget $LIMITS_DIR/country-$number $MAX_PAGES_PER_COUNTRY $MAX_SUBAGENTS_PER_COUNTRY STREAM_FILE $budget"
-    run_session "part-$number" /app/session-country.md "$hook" yes \
-      -e "s/{{PART}}/$number/g" -e "s/{{PART2}}/$(printf '%02d' "$number")/g" \
+    stop_hook="/app/json-check-hook.sh $file /app/country-check.jq $LIMITS_DIR/country-$number-check-blocks"
+    run_session "country-$number" /app/session-country.md "$hook" yes "$stop_hook" "$COUNTRY_SESSION_MAX_UTILIZATION" \
+      -e "s/{{PART2}}/$(printf '%02d' "$number")/g" \
       -e "s/{{HEADING}}/$heading/g" -e "s/{{COUNTRY}}/$name/g" -e "s/{{SLUG}}/$slug/g"
+    research_stopped "durante $heading" || true
   done
-  if ! part_complete "$file"; then
-    write_skipped_part "$number" "$heading" "Este país não foi concluído nesta edição por uma falha na pesquisa."
+  if ! country_complete "$file"; then
+    if [ -e "$STOPPED_FILE" ]; then
+      write_skipped_country "$number" "$heading" "não foi pesquisado nesta edição: a pesquisa parou no limite de uso."
+    else
+      write_skipped_country "$number" "$heading" "não foi concluído nesta edição por uma falha na pesquisa."
+    fi
   fi
-  log "Part $number used $(cat "$LIMITS_DIR/country-$number/pages" 2>/dev/null || echo 0) pages and $(cat "$LIMITS_DIR/country-$number/subagents" 2>/dev/null || echo 0) subagents"
+  log "Country $number used $(cat "$LIMITS_DIR/country-$number/pages" 2>/dev/null || echo 0) pages and $(cat "$LIMITS_DIR/country-$number/subagents" 2>/dev/null || echo 0) subagents"
 done
 
-if [ "$(grep -l 'não foi concluído nesta edição' "$WORK_DIR"/output/parts/part-0[1-6].md 2>/dev/null | wc -l)" = "6" ]; then
-  fail "nenhum país foi pesquisado. Veja data/logs/$RUN_DATE.log e data/work/$RUN_DATE/claude-*.jsonl."
-fi
+researched=0
+for number in 1 2 3 4 5 6; do
+  jq -e 'has("skipped") | not' "$(country_file "$number")" >/dev/null 2>&1 && researched=$((researched + 1))
+done
+[ "$researched" -gt 0 ] || fail "nenhum país foi pesquisado. Veja data/logs/$RUN_DATE.log e data/work/$RUN_DATE/claude-*.jsonl."
 
 highlights_valid() {
   jq -e -f /app/highlights-check.jq "$WORK_DIR/output/highlights.json" >/dev/null 2>&1
 }
 
-# 2. Conclusions: parts 7 to 11, highlights.json and DONE
+# 2. Conclusions: highlights.json and DONE, with the rest of the window
 for attempt in 1 2; do
   # DONE only counts with a highlights.json the blog and youtube_dark can read
   if [ -e "$WORK_DIR/output/DONE" ] && ! highlights_valid; then
@@ -205,7 +241,8 @@ for attempt in 1 2; do
     mv "$WORK_DIR/output/highlights.json" "$WORK_DIR/output/highlights.invalid.json"
   fi
   [ -e "$WORK_DIR/output/DONE" ] && break
-  run_session conclusions /app/session-synthesis.md "" no
+  stop_hook="/app/json-check-hook.sh $WORK_DIR/output/highlights.json /app/highlights-check.jq $LIMITS_DIR/highlights-blocks $WORK_DIR/output/DONE"
+  run_session conclusions /app/session-synthesis.md "" no "$stop_hook" ""
 done
 
 if [ -e "$WORK_DIR/output/DONE" ] && ! highlights_valid; then

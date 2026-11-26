@@ -2,7 +2,7 @@
 # One research: lock, mark as running in MongoDB, run Claude (as `node`), save the result.
 #   run_daily.sh <date>
 # Root only (it holds MONGO_URI). MANUAL_RUN=1 runs again a day that already has a lock, reusing
-# the parts already finished in /data/work/<date>.
+# the countries already finished in /data/work/<date>.
 set -uo pipefail
 
 RUN_DATE="${1:-$(date +%F)}"

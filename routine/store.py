@@ -6,15 +6,17 @@ Usage:
 
 Document of the `researches` collection (one per date, read by the frontend and by youtube_dark):
     date, edition (always B now; A was the complete Thursday edition, kept in the old documents),
-    status (running | completed | failed), started_at, finished_at, title, summary, parts [{number, title, slug, markdown}],
-    recommendations, top_opportunities, notices (what the limits cut, shown in the blog), error
+    status (running | completed | failed), started_at, finished_at, title,
+    countries [{number, country, trends, content_formats, opportunities} or {number, country, skipped}],
+    comparison, top_opportunities, content_opportunities, business_opportunities, recommendations,
+    notices (what the limits cut, shown in the blog), error
+Only tables are saved now. The documents saved before keep their text (summary and
+parts [{number, title, slug, markdown}]).
 """
 
 import json
 import os
-import re
 import sys
-import unicodedata
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -23,10 +25,10 @@ from pymongo import ASCENDING, MongoClient
 WORK_ROOT = Path(os.environ.get("WORK_ROOT", "/data/work"))
 DATABASE_NAME = os.environ.get("MONGO_DATABASE", "market_trends")
 COLLECTION_NAME = "researches"
-PART_COUNT = 11
+COUNTRY_COUNT = 6
 # The only edition now (the documents of the old complete edition keep "A")
 EDITION = "B"
-PART_COMPLETE_MARKER = "<!-- PARTE COMPLETA -->"
+TABLE_KEYS = ["comparison", "top_opportunities", "content_opportunities", "business_opportunities"]
 RECOMMENDATION_KEYS = [
     "most_promising",
     "overlooked_micro_niches",
@@ -45,28 +47,24 @@ def get_collection():
     return collection
 
 
-def slugify(text: str) -> str:
-    normalized = unicodedata.normalize("NFKD", text).encode("ascii", "ignore").decode()
-    return re.sub(r"[^a-z0-9]+", "-", normalized.lower()).strip("-")
-
-
-def read_part(path: Path, number: int) -> dict | None:
+def read_country(path: Path, number: int) -> dict | None:
+    """The tables of a country (run.sh already checked them with country-check.jq)."""
     if not path.is_file():
         return None
-    content = path.read_text(encoding="utf-8").strip()
-    complete = content.endswith(PART_COMPLETE_MARKER)
-    content = content.removesuffix(PART_COMPLETE_MARKER).rstrip()
-    lines = content.splitlines()
-    title = f"Parte {number}"
-    if lines and lines[0].startswith("# "):
-        title = lines[0][2:].strip()
-        content = "\n".join(lines[1:]).strip()
+    try:
+        country = json.loads(path.read_text(encoding="utf-8"))
+    except json.JSONDecodeError:
+        return None
+    if not isinstance(country, dict) or not country.get("country"):
+        return None
+    if country.get("skipped"):
+        return {"number": number, "country": country["country"], "skipped": country["skipped"]}
     return {
         "number": number,
-        "title": title,
-        "slug": slugify(title),
-        "markdown": content,
-        "complete": complete,
+        "country": country["country"],
+        "trends": country.get("trends") or [],
+        "content_formats": country.get("content_formats") or [],
+        "opportunities": country.get("opportunities") or [],
     }
 
 
@@ -112,11 +110,11 @@ def read_notices(path: Path) -> list[str]:
 
 def finish(run_date: str) -> None:
     output_dir = WORK_ROOT / run_date / "output"
-    parts = []
-    for number in range(1, PART_COUNT + 1):
-        part = read_part(output_dir / "parts" / f"part-{number:02d}.md", number)
-        if part is not None:
-            parts.append(part)
+    countries = []
+    for number in range(1, COUNTRY_COUNT + 1):
+        country = read_country(output_dir / "countries" / f"country-{number:02d}.json", number)
+        if country is not None:
+            countries.append(country)
 
     highlights, highlights_error = read_highlights(output_dir / "highlights.json")
     errors = []
@@ -124,10 +122,10 @@ def finish(run_date: str) -> None:
         errors.append((output_dir / "FAILED").read_text(encoding="utf-8").strip())
     if not (output_dir / "DONE").is_file():
         errors.append("output/DONE não foi gerado.")
-    missing = [number for number in range(1, PART_COUNT + 1)
-               if not any(part["number"] == number and part["complete"] for part in parts)]
+    missing = [number for number in range(1, COUNTRY_COUNT + 1)
+               if not any(country["number"] == number for country in countries)]
     if missing:
-        errors.append(f"partes incompletas ou ausentes: {missing}")
+        errors.append(f"países sem tabelas: {missing}")
     if highlights_error:
         errors.append(highlights_error)
 
@@ -138,11 +136,10 @@ def finish(run_date: str) -> None:
         "notices": read_notices(output_dir / "NOTICE"),
         "finished_at": now,
         "updated_at": now,
-        "parts": parts,
+        "countries": countries,
         "title": (highlights or {}).get("title") or f"Tendências de mercado — {run_date}",
-        "summary": (highlights or {}).get("summary") or "",
         "recommendations": (highlights or {}).get("recommendations") or [],
-        "top_opportunities": (highlights or {}).get("top_opportunities") or [],
+        **{key: (highlights or {}).get(key) or [] for key in TABLE_KEYS},
     }
     update = {"$set": document, "$setOnInsert": {"started_at": now}}
     if errors:
@@ -150,7 +147,7 @@ def finish(run_date: str) -> None:
     else:
         update["$unset"] = {"error": ""}
     get_collection().update_one({"date": run_date}, update, upsert=True)
-    print(f"{run_date}: {document['status']} ({len(parts)} parts){' - ' + document['error'] if errors else ''}")
+    print(f"{run_date}: {document['status']} ({len(countries)} countries){' - ' + document['error'] if errors else ''}")
 
 
 def main() -> None:
